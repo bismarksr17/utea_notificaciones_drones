@@ -30,6 +30,6 @@ docker build -t utea-notificaciones-drones .
 docker run -d --name utea-notificaciones-drones utea-notificaciones-drones
 
 # indicando volumenes
-docker run -d --name utea-notificaciones-drones -v C:\Users\bismarksr\Desktop\logs:/app/logs utea-notificaciones-drones
+docker run --env-file .env -d --name utea-notificaciones-drones -v "G:\\Ingenio Azucarero Guabira S.A\\UTEA - SEMANAL - EQUIPO AVIACION UTEA\\Pulverizacion\\Data:/app/contactos utea-notificaciones-drones
 
 ```

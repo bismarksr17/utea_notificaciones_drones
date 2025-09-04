@@ -2,7 +2,9 @@ pandas
 psycopg2-binary
 shapely
 config
-dotenv
+python-dotenv
 gevent
 requests
 socketIO-client
+openpyxl
+

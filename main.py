@@ -1,30 +1,26 @@
-import sys
-sys.path.append('.')
-from config import POSTGRES_UTEA
 from config import DOCKER_NOTIFICACIONES_DRON_ADM
+from config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+from config import PATH_XLSX_CONTAC
 
-
+import sys
 sys.path.append('_amigocloud')
 from amigocloud import AmigoCloud
 
 # conexion postgress
 import psycopg2
-import os
-
 import pandas as pd
-
-import locale
 import time
 from datetime import datetime, timedelta
 from shapely import wkb
-
-
-# CONSTANTES
-#'\Ingenio Azucarero Guabira S.A\UTEA - SEMANAL - EQUIPO AVIACION UTEA\Pulverizacion\CONTACTOS.xlsx'
-PATH_XLSX_CONTAC = '/app/contactos/CONTACTOS.xlsx'
+import logging
 
 amigocloud = AmigoCloud(token=DOCKER_NOTIFICACIONES_DRON_ADM)
 amigocloud
+
+logging.basicConfig(
+    level=logging.INFO, 
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 # DATOS DE PILOTOS
 tecnico_telf = {
@@ -41,12 +37,11 @@ aux_telf = {
 
 def obtener_conexion():
     return psycopg2.connect(
-        host=POSTGRES_UTEA["HOST"],
-        port=POSTGRES_UTEA["PORT"],
-        database=POSTGRES_UTEA["DATABASE"],
-        user=POSTGRES_UTEA["USER"],
-        password=POSTGRES_UTEA["PASSWORD"]
-    )
+        host=DB_HOST, 
+        port=DB_PORT, 
+        database=DB_NAME, 
+        user=DB_USER, 
+        password=DB_PASSWORD)
 
 def insertar_mensaje_whatsapp(cod_canero, nombre_canero, numero_contac, mensaje, enviado=False, fecha_enviado=None):
     try:
@@ -60,10 +55,10 @@ def insertar_mensaje_whatsapp(cod_canero, nombre_canero, numero_contac, mensaje,
         
         conexion.commit()
         cursor.close()
-        print("Mensaje insertado correctamente.")
+        logging.info("Mensaje insertado correctamente.")
     except Exception as e:
         conexion.rollback()
-        print("Error al insertar:", e)
+        logging.exception("Error inesperado")
     return None
 
 # EJECUTAR QUERY
@@ -98,8 +93,7 @@ def get_registro_notificacion_tricho():
         # extrae el primer elemento
         return notif
     except Exception as general_err:
-        print(f"Error inesperado al conectarse a AmigoCloud [def get_registro_notificacion()]: {general_err}")
-        return None
+        logging.exception("Error inesperado al conectarse a AmigoCloud")
     return None
 
 def get_registro_notificacion_pulv():
@@ -111,8 +105,7 @@ def get_registro_notificacion_pulv():
         # extrae el primer elemento
         return notif
     except Exception as general_err:
-        print(f"Error inesperado al conectarse a AmigoCloud [def get_registro_notificacion()]: {general_err}")
-        return None
+        logging.exception("Error inesperado al conectarse a AmigoCloud")
     return None
 
 def anular_registro_notificacion(idd, origen):
@@ -126,7 +119,7 @@ def anular_registro_notificacion(idd, origen):
             exe = ejecutar_query_sql(35248, query, 'post')
             return True
     except Exception as general_err:
-        print(f"Error inesperado: {general_err}")
+        logging.exception("Error inesperado")
         return False
     return None
 
@@ -145,10 +138,9 @@ def generar_msj_notnull(df_notif_notnull):
         origen = row['origen']
         
         fecha_str, hora_str = extraer_fecha_hora(fecha)
-        print(fecha_str, hora_str)
         
         if piloto in tecnico_telf == False:
-            print('El nombre de piloto no esta registrado')
+            logging.info("El nombre de piloto no esta registrado")
             continue ## NOTIFICAR AL COORDINADOR QUE EL PILOTO NO ESTA EN LA LISTA DE PILOTOS
         
         num_cell = tecnico_telf[piloto]
@@ -175,7 +167,7 @@ def generar_msj_notnull(df_notif_notnull):
             continue
         
         if anular_registro_notificacion(idd, origen) == False:
-            print('Error al anular una notificacion..!!!')
+            logging.info("Error al anular una notificacion..!!!")
             continue
         
         # registra mensajes para los numeros validos de cañero
@@ -223,7 +215,7 @@ def generar_msj_isnull(df_notif_isnull):
             msj = f'{piloto} ha registrado una notificaion de {tipo_mensaje} de {tipo_labor} sin indicar el cañero, sin nombre del cañero la notificacion no se enviará'
             generar_msj_para_coordinador(fecha, idd, msj)
         else:
-            print('El nombre de piloto no esta registrado')
+            logging.info("El nombre de piloto no esta registrado")
             continue
     return None
 
@@ -244,7 +236,7 @@ def get_nums_cells_validos(cod_ca):
 
 def extraer_fecha_hora(fecha):
     # Establecer el idioma español
-    locale.setlocale(locale.LC_TIME, "Spanish_Spain.1252")  # Para Windows
+    #locale.setlocale(locale.LC_TIME, "Spanish_Spain.1252")  # Para Windows
     
     dt = datetime.fromisoformat(fecha)
     # Restar 4 horas
@@ -269,12 +261,12 @@ def procesar_notificaciones():
     # obtener notificaciones nuevas
     notif_tricho = get_registro_notificacion_tricho()
     if notif_tricho == None:
-        print('Error al ejecuar: def get_registro_notificacion() control biológico')
+        logging.info("Error al ejecuar: def get_registro_notificacion() control biológico")
     # convertir a dataframe
 
     notif_pulv = get_registro_notificacion_pulv()
     if notif_pulv == None:
-        print('Error al ejecuar: def get_registro_notificacion() pulverizacion')
+        logging.info("Error al ejecuar: def get_registro_notificacion() pulverizacion")
     
     # convertir a dataframe
     notif = notif_tricho + notif_pulv
@@ -293,8 +285,7 @@ def procesar_notificaciones():
         if len(df_notif_notnull) > 0:
             generar_msj_notnull(df_notif_notnull)
     else:
-        ahora = datetime.now()
-        print(ahora.strftime("%Y-%m-%d %H:%M:%S"), 'No existen nuevas notificaciones')
+        logging.info("No existen nuevas notificaciones")
     return None
 
 insertar_mensaje_whatsapp(
@@ -306,4 +297,4 @@ insertar_mensaje_whatsapp(
 
 while True:
     procesar_notificaciones()
-    time.sleep(30)  # 600 segundos = 10 minutos
+    time.sleep(600)  # 600 segundos = 10 minutos
